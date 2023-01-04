@@ -1,5 +1,4 @@
 /*
- * Leaflet.TextPath - Shows text along a polyline
  * Inspired by Tom Mac Wright article :
  * http://mapbox.com/osmdev/2012/11/20/getting-serious-about-svg/
  */
@@ -21,8 +20,22 @@ var PolylineTextPath = {
 
     onRemove: function (map) {
         map = map || this._map;
-        if (map && this._textNode && map._renderer._container)
-            map._renderer._container.removeChild(this._textNode);
+        if (map && this._textNode) {
+            // var svg = map._renderer._container;
+            if (this._textOptions.pane) {
+                paned_svg = this._map._getPaneRenderer(this._textOptions.pane);
+                try{
+                    svg = paned_svg._container;
+                }
+                catch (err) {
+                    var svg = this._map._renderer._container;
+                }
+            } else {
+		var svg = map._renderer._container;
+	    }
+	    
+            svg.removeChild(this._textNode);
+        }
         __onRemove.call(this, map);
     },
 
@@ -40,7 +53,7 @@ var PolylineTextPath = {
         var text = this._text,
             options = this._textOptions;
         if (text) {
-            this.setText(null).setText(text, options);
+            this.setText(null, options).setText(text, options);
         }
     },
 
@@ -62,10 +75,28 @@ var PolylineTextPath = {
         };
         options = L.Util.extend(defaults, options);
 
+        // var svg = this._map._renderer._container;
+        if (options.pane) {
+
+            paned_svg = this._map._getPaneRenderer(options.pane);
+
+            try{
+                svg = paned_svg._container;
+            }
+            catch (err) {
+                var svg = this._map._renderer._container;
+            }
+        } else {
+            var svg = this._map._renderer._container;
+	}
+
         /* If empty text, hide */
         if (!text) {
             if (this._textNode && this._textNode.parentNode) {
-                this._map._renderer._container.removeChild(this._textNode);
+                try {
+                    svg.removeChild(this._textNode);
+                }
+                catch (err) { ; }
                 
                 /* delete the node, so it will not be removed a 2nd time if the layer is later removed from the map */
                 delete this._textNode;
@@ -75,7 +106,7 @@ var PolylineTextPath = {
 
         text = text.replace(/ /g, '\u00A0');  // Non breakable spaces
         var id = 'pathdef-' + L.Util.stamp(this);
-        var svg = this._map._renderer._container;
+
         this._path.setAttribute('id', id);
 
         if (options.repeat) {
@@ -89,7 +120,7 @@ var PolylineTextPath = {
             svg.removeChild(pattern);
 
             /* Create string as long as path */
-            text = new Array(Math.ceil(isNaN(this._path.getTotalLength() / alength) ? 0 : this._path.getTotalLength() / alength)).join(text);
+            text = new Array(Math.ceil(this._path.getTotalLength() / alength)).join(text);
         }
 
         /* Put it along the path using textPath */
@@ -115,41 +146,24 @@ var PolylineTextPath = {
 
         /* Center text according to the path's bounding box */
         if (options.center) {
-            var textLength = textNode.getComputedTextLength();
-            var pathLength = this._path.getTotalLength();
+            var textWidth = textNode.getBBox().width;
+            var pathWidth = this._path.getBoundingClientRect().width;
             /* Set the position for the left side of the textNode */
-            textNode.setAttribute('dx', ((pathLength / 2) - (textLength / 2)));
-        }
-
-        /* Change label rotation (if required) */
-        if (options.orientation) {
-            var rotateAngle = 0;
-            switch (options.orientation) {
-                case 'flip':
-                    rotateAngle = 180;
-                    break;
-                case 'perpendicular':
-                    rotateAngle = 90;
-                    break;
-                default:
-                    rotateAngle = options.orientation;
-            }
-
-            var rotatecenterX = (textNode.getBBox().x + textNode.getBBox().width / 2);
-            var rotatecenterY = (textNode.getBBox().y + textNode.getBBox().height / 2);
-            textNode.setAttribute('transform','rotate(' + rotateAngle + ' '  + rotatecenterX + ' ' + rotatecenterY + ')');
+            textNode.setAttribute('dx', ((pathWidth / 2) - (textWidth / 2)));
         }
 
         /* Initialize mouse events for the additional nodes */
-        if (this.options.interactive) {
+        if (this.options.clickable) {
             if (L.Browser.svg || !L.Browser.vml) {
-                textPath.setAttribute('class', 'leaflet-interactive');
+                textPath.setAttribute('class', 'leaflet-clickable');
             }
 
-            var events = ['click', 'dblclick', 'mousedown', 'mouseover',
+            L.DomEvent.on(textNode, 'click', this._onMouseClick, this);
+
+            var events = ['dblclick', 'mousedown', 'mouseover',
                           'mouseout', 'mousemove', 'contextmenu'];
             for (var i = 0; i < events.length; i++) {
-                L.DomEvent.on(textNode, events[i], this.fire, this);
+                L.DomEvent.on(textNode, events[i], this._fireMouseEvent, this);
             }
         }
 
@@ -169,7 +183,5 @@ L.LayerGroup.include({
         return this;
     }
 });
-
-
 
 })();
